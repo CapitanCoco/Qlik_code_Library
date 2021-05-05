@@ -1,0 +1,15 @@
+LET S_ETAPA = SUBFIELD(DocumentName(),'_',1);
+LET S_MODULO = SUBFIELD(DocumentName(),'_',2);
+SET v_Admin = '25DEMAYO\B047349';
+
+LET S_NIVEL = SUBFIELD(DocumentName(),'_',3);
+LET S_DEPENDENCIA = PurgeChar('$(S_NIVEL)','N') ;
+LET S_PROCESO = TextBetween(UPPER(DocumentName()),'$(S_NIVEL)'&'_','.QVW');
+
+TEMPLATE:
+LOAD
+	NOW() 				AS TEMPLATE.INICIO,
+	OSUSER()			AS TEMPLATE.USUARIO,
+	DocumentName()			AS TEMPLATE.DOCUMENT,
+	'$(S_PROCESO)' 			AS TEMPLATE.PROCESS
+AUTOGENERATE 1;
