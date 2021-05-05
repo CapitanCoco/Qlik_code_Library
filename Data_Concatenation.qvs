@@ -1,0 +1,54 @@
+SUB FIELD_DEFINITIONS(sub_Operador,s_Field_Definitions,sub_Excel_location,sub_Sheet)
+
+	trace __________________________;
+	TRACE Se crea la definición de los campos de $(sub_Operador) para renombrarlos, y así armar una única tabla consolidada;
+
+	Field_Definitions:
+	LOAD CONCAT(FIELD_DEFINITION,', ') AS FIELDS_STRING; // y aqui se define una lista con todos los alias.
+	LOAD TRIM(CAMPOS_$(sub_Operador)) &' AS '& CAMPOS AS FIELD_DEFINITION
+	FROM [$(sub_Excel_location)] //Este excel contiene la definición de la relación entre los campos de las diferentes tablas
+	(ooxml, embedded labels, table is $(sub_Sheet))//Hoja1
+	where len(CAMPOS_$(sub_Operador)) > 1
+	;
+	trace __________________________;	
+	trace Este excel contiene la definición de la relación entre los campos de las diferentes tablas;
+// En este archivo hay una lista de cada campo relevante de los QVDs de origen ;
+// y también un campo único (CAMPOS) que contiene el nombre comun de los campos para la concatenación;
+
+	LET s_Field_Definitions = PEEK('FIELDS_STRING');
+	
+	trace $(s_Field_Definitions);
+	
+END SUB;
+
+trace 
+Primero se define la lista de tablas a Concatenar, para recorrer todos los archivos;
+
+Table_List:
+LOAD * INLINE [
+Table_List
+CLARO
+MOVISTAR
+PERSONAL
+NEXTEL
+TELECOM
+TELEFONICA
+];
+
+trace __________________________;
+TRACE Y luego se realiza la concatenación de estas fuentes de datos, al tiempo que se normaliza los mismos;
+
+TRACE para concatenar, primero se crea la tabla haciá donde todos los datos se concatenaran;
+$(S_PROCESO): LOAD NULL() AS OPERADOR AutoGenerate 1;
+
+TRACE Y luego se recorre cada una de las tablas;
+FOR EACH i_Table IN FieldValueList('Table_List')
+
+	CALL FIELD_DEFINITIONS('$(i_Operador)',s_Field_Definitions,'..\CFG\CONSOLIDACION_TABLAS.xlsx','Hoja1');
+
+	CONCATENATE($(S_PROCESO))
+	LOAD $(s_Field_Definitions)
+	FROM [..\..\..\DATA\Excel\QVD\DATA_EXCEL_TELEFONIA_$(i_Operador).qvd](qvd);
+
+next i_Operador;
+
