@@ -1,0 +1,172 @@
+/*************TABLA CALENDARIO (con Flags)******************************************/
+
+FECHAS:
+LOAD DISTINCT
+     Fecha
+RESIDENT TablaX;
+/*Cambiar el nombre de la tabla que contiene las fechas a tomar*/
+
+
+SET S_FiscalMonthStart=1;
+
+MIN_MAX:
+LOAD
+MIN(Fecha) AS MINIMA_FECHA,
+MAX(Fecha) AS MAXIMA_FECHA
+RESIDENT FECHAS
+;
+DROP TABLE FECHAS;
+
+let vFechaInicio=DATE(NUM(Peek('MINIMA_FECHA',0,'MIN_MAX')),'DD/MM/YYYY');
+let vFechaFin=DATE(NUM(Peek('MAXIMA_FECHA',0,'MIN_MAX')),'DD/MM/YYYY');
+
+DROP TABLE MIN_MAX;
+
+	
+
+Calendario_TMP:
+LOAD
+	$(vFechaInicio) + recno() - 1	AS %Fecha
+AUTOGENERATE ($(vFechaFin) - $(vFechaInicio) + 1);
+
+TIEMPO:
+LOAD
+	Date(%Fecha,'DD/MM/YYYY') 									AS FechaCalendario,	
+	num(year(%Fecha),'0000')&num(month(%Fecha),'00')&
+	num(day(%Fecha),'00') 										AS %Fecha,
+	year(%Fecha)												AS Año,
+	num(month(%Fecha),'00')										AS Mes,
+	day(%Fecha)													AS Dia,
+	dual(
+		text(date(%Fecha, 'MMM')) &'-'& year(%Fecha),
+		year(%Fecha) & num(month(%Fecha), '00')
+		)														AS AñoMes
+RESIDENT Calendario_TMP;
+DROP TABLE Calendario_TMP;
+
+//Arma el cartesiano de fechas
+Relacion:
+JOIN
+LOAD 
+FechaCalendario 												as FechaRelacion
+RESIDENT TIEMPO;
+
+
+
+TIEMPO_FINAL:
+LOAD DISTINCT
+
+     FechaCalendario,
+     FechaRelacion,
+     Año, 
+     Mes, 
+     Dia,
+     AñoMes,
+     IF(FechaRelacion>=ADDMONTHS(FechaCalendario,-11) AND FechaRelacion<= FechaCalendario,1,0)	AS FlagR12,
+     IF(FechaRelacion>=ADDMONTHS(FechaCalendario,-8)  AND FechaRelacion<= FechaCalendario,1,0)	AS FlagR9,
+     IF(FechaRelacion>=ADDMONTHS(FechaCalendario,-5)  AND FechaRelacion<= FechaCalendario,1,0)	AS FlagR6,
+     IF(FechaRelacion>=ADDMONTHS(FechaCalendario,-2)  AND FechaRelacion<= FechaCalendario,1,0)	AS FlagR3,
+     IF(FechaRelacion>=ADDMONTHS(FechaCalendario,-23) AND FechaRelacion<= FechaCalendario,1,0)	AS FlagR24,
+     FABS(InYearToDate(FechaRelacion, FechaCalendario,0,$(S_FiscalMonthStart))) 				AS FlagYTD,
+	 FABS(InYearToDate(FechaRelacion, FechaCalendario,-1,$(S_FiscalMonthStart))) 				AS FlagYTD_PY,
+     FABS(FechaRelacion = FechaCalendario) 														AS FlagCY,
+	 FABS(FechaRelacion = ADDMONTHS(FechaCalendario,-12)) 										AS FlagPY,
+	 IF(MONTHSTART(FechaRelacion) = ADDMONTHS(MONTHSTART(FechaCalendario),-1),1)				AS FlagPM,
+	 IF(MONTHSTART(FechaRelacion) = ADDMONTHS(MONTHSTART(FechaCalendario),-3),1)				AS FlagPQ
+     
+     
+RESIDENT TIEMPO
+WHERE 
+	//SEGUN LOS FLAGS A UTILIZAR EN EL PROYETO VOY AGREGANDOLOS EN EL LOAD Y EN EL WHERE
+	(
+	FABS(InYearToDate(FechaRelacion, FechaCalendario,0,$(S_FiscalMonthStart))) 		= 1 	//(YTD)
+	OR FABS(InYearToDate(FechaRelacion, FechaCalendario,-1,$(S_FiscalMonthStart))) 	= 1 	//(LYTD)
+	OR FABS(FechaRelacion = FechaCalendario) 											= 1 //(CY)
+	OR FABS(FechaRelacion = ADDMONTHS(FechaCalendario,-12)) 							= 1 //(PY)
+	OR MONTHSTART(FechaRelacion) = ADDMONTHS(MONTHSTART(FechaCalendario),-1)				//(PM)
+	OR MONTHSTART(FechaRelacion) = ADDMONTHS(MONTHSTART(FechaCalendario),-3)				//(PQ)
+	OR (FechaRelacion>=ADDMONTHS(FechaCalendario,-11) AND FechaRelacion<= FechaCalendario)	//(R12)
+	OR (FechaRelacion>=ADDMONTHS(FechaCalendario,-8)  AND FechaRelacion<= FechaCalendario)	//(R9)
+	OR (FechaRelacion>=ADDMONTHS(FechaCalendario,-5)  AND FechaRelacion<= FechaCalendario)	//(R6)
+	OR (FechaRelacion>=ADDMONTHS(FechaCalendario,-2)  AND FechaRelacion<= FechaCalendario)	//(R3)
+	OR (FechaRelacion>=ADDMONTHS(FechaCalendario,-23) AND FechaRelacion<= FechaCalendario)	//(R24)
+	)
+
+;
+DROP TABLE TIEMPO;
+
+
+
+TIEMPO:
+LOAD distinct
+	 //CAMPO CLAVE CON LA TABLA FACT
+	 DATE(FechaRelacion) 								AS %FechaRelacion,
+	 
+	 //CAMPOS SELECCIONABLES X USER
+     FechaCalendario,
+     Day(FechaCalendario) 		as Día, 
+     WeekDay(FechaCalendario) 	as Día_Desc, 
+     Week(FechaCalendario) 		as Semana, 
+     Año, 
+     Mes, 
+     AñoMes,
+     
+     //FLAGS
+     FlagCY,
+     FlagPY,
+     FlagPQ,
+     FlagPM,
+     FlagR9,
+     FlagR6,
+     FlagR3,
+     FlagYTD,
+     FlagYTD_PY,
+     FlagR12,
+     
+     //CAMPOS A UTILIZAR EN GRAFICOS EVOLUTIVOS (NO SELECCIONABLES X USERS)
+     year(FechaRelacion)&num(month(FechaRelacion),'00') AS AñoMesRelacion,
+     month(FechaRelacion)&'-'&year(FechaRelacion)       AS Mes_Año_Flag,
+     year(FechaRelacion) 								AS Año_Flag,
+     Day(FechaRelacion) 								AS Día_Flag, 
+     WeekDay(FechaRelacion) 							AS Día_Desc_Flag, 
+     Week(FechaRelacion) 								AS Semana_Flag,
+     month(FechaRelacion) 								AS Mes_Flag
+RESIDENT TIEMPO_FINAL;
+DROP Table TIEMPO_FINAL;
+
+
+left join(TIEMPO)
+LOAD * INLINE [
+    MesDescripcion, Mes , NumeroMes
+    Ene, 01 ,1
+    Feb, 02 ,2
+    Mar, 03 ,3
+    Abr, 04 ,4
+    May, 05 ,5
+    Jun, 06 ,6
+    Jul, 07 ,7
+    Ago, 08 ,8
+    Sep, 09 ,9
+    Oct, 10 ,10
+    Nov, 11 ,11
+    Dic, 12 ,12
+];
+
+left join(TIEMPO)
+LOAD * INLINE [
+    Mes , NumeroQ , DescripcionQ, NumeroH, DescripcionH
+    01 ,1 , Q1,1,H1
+    02 ,1 , Q1,1,H1
+    03 ,1, Q1,1,H1
+    04 ,2, Q2,1,H1
+    05 ,2, Q2,1,H1
+    06 ,2, Q2,1,H1
+    07 ,3, Q3,2,H2
+    08 ,3, Q3,2,H2
+    09 ,3, Q3,2,H2
+    10 ,4, Q4,2,H2
+    11 ,4, Q4,2,H2
+    12 ,4, Q4,2,H2
+];
+
+
