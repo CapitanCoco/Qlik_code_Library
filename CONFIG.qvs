@@ -1,6 +1,6 @@
 LET S_ETAPA = SUBFIELD(DocumentName(),'_',1);
 LET S_MODULO = SUBFIELD(DocumentName(),'_',2);
-SET v_Admin = '25DEMAYO\B047349';
+SET v_Admin = 'AdminUser';
 
 LET S_NIVEL = SUBFIELD(DocumentName(),'_',3);
 LET S_DEPENDENCIA = PurgeChar('$(S_NIVEL)','N') ;
