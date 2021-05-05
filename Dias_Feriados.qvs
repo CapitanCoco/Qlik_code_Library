@@ -1,0 +1,65 @@
+sub feriados (s_Año_Inicio,s_Año_Fin)
+
+set p_Web_File_Conector_Generico = 'URL_NOLABORABLES';
+Trace Se realiza la extracción de los feriados desde $(s_Año_Inicio) hasta $(s_Año_Fin);
+
+Temp: load null() as Linea autogenerate 1;
+
+FOR i_Año = $(s_Año_Inicio) to $(s_Año_Fin)
+
+CONCATENATE(Temp)
+LOAD '$(i_Año).'&ROWNO() as Row_id,
+     purgechar(Linea,'{}[]"') as Linea ; //'Año:'&$(i_Año) &','& 
+LOAD subfield( @1, '},{') as Linea
+FROM [lib://$(p_Web_File_Conector_Generico)]
+(URL IS 'http://nolaborables.com.ar/api/v2/feriados/$(i_Año)', txt, utf8, no labels, delimiter is '\t');
+//(txt, utf8, embedded labels, delimiter is '\t', msq);
+
+next i_Año;
+
+Temp_2:
+Load Row_id,
+     subfield(Datos,':',1) as Tipo_Dato,
+     subfield(Datos,':',2) as Dato;
+Load Row_id,
+     subfield( Linea,',') as Datos;
+load Row_id,
+     Linea & ',año:'&subfield(Row_id,'.',1) as Linea
+Resident Temp;
+
+drop table Temp;
+
+tmp:  
+Generic load 
+    Row_id,
+    Tipo_Dato,
+    Dato
+resident Temp_2
+where len(Tipo_Dato) > 1;
+
+RestConnectorMasterTable:
+Load distinct Row_id resident Temp_2;
+
+Drop table Temp_2;  
+
+FOR i = NoOfTables()-1 to 0 STEP -1
+
+  LET vTable=TableName($(i));
+  IF WildMatch('$(vTable)', 'tmp.*') THEN 
+
+  LEFT JOIN ([RestConnectorMasterTable]) LOAD distinct * RESIDENT [$(vTable)];
+
+  DROP TABLE [$(vTable)];
+
+  ENDIF 
+
+NEXT i
+
+MAP_FERIADOS:
+MAPPING LOAD     
+    num(makedate(año,mes,dia))     AS Fecha_Feriado, 
+    motivo                        AS Motivo_Feriado //     1                             AS $(f_flag)Feriado
+RESIDENT RestConnectorMasterTable;
+DROP TABLE RestConnectorMasterTable;
+
+end sub;
