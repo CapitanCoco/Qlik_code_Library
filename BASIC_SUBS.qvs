@@ -1,0 +1,184 @@
+sub store_table (sub_table_name,sub_store_folder,sub_file)
+
+	let sub_Rows = NoOfRows('$(sub_table_name)');
+    
+    trace table $(sub_table_name) has $(sub_Rows) records;
+    
+    if $(sub_Rows) >= 1 then
+
+    	trace Store table $(sub_table_name) into [$(sub_store_folder)/$(sub_file).qvd];
+        store "$(sub_table_name)" into [$(sub_store_folder)/$(sub_file).qvd](qvd);
+    
+    	drop table "$(sub_table_name)";
+    Else
+    	trace table $(sub_table_name) invalid. Will not be stored;
+        
+	end if;
+    
+end sub;
+
+SUB AUTO_STORE(S_TABLE,S_SEGMENT)
+
+	CALL $(S_LAYER)_store('$(S_TABLE)','$(v_QlikSenseData)','$(S_MODULE)','$(S_LEVEL)','$(S_TITLE)','$(S_SEGMENT)');
+	
+END SUB;
+
+
+sub STG_info(S_MODULE,S_LEVEL,S_TITLE)
+
+	let sub_baseline = DocumentTitle();
+    
+	let S_MODULE = TEXTBETWEEN('$(sub_baseline)','STG_','_N');
+	let S_LEVEL = TEXTBETWEEN('$(sub_baseline)','_N','_');
+	let S_TITLE = SUBFIELD('$(sub_baseline)','_N$(S_LEVEL)_',2);
+	
+end sub;
+
+sub DATA_info(S_MODULE,S_LEVEL,S_TITLE)
+
+	let sub_baseline = DocumentTitle();
+    
+	let S_MODULE = TEXTBETWEEN('$(sub_baseline)','DATA_','_');
+	let S_LEVEL = 0;
+	let S_TITLE = SUBFIELD('$(sub_baseline)','_$(S_MODULE)_',2);
+	
+end sub;
+
+sub STG_store(sub_table,sub_library,sub_module,sub_level,sub_title,sub_segment)
+
+	IF '$(sub_segment)' = '0' THEN
+		let sub_store_folder = 'lib://$(sub_library)/QVD/STG/$(sub_module)';
+		let sub_file = 'STG_$(sub_module)_N$(sub_level)_$(sub_table)';
+	ELSE 
+		let sub_store_folder = 'lib://$(sub_library)/QVD/STG/$(sub_module)/$(sub_title)';
+		let sub_file = 'STG_$(sub_module)_N$(sub_level)_$(sub_table)_$(sub_segment)';
+	ENDIF;		
+	
+	CALL store_table ('$(sub_table)','$(sub_store_folder)','$(sub_file)') 
+			
+end sub;
+
+sub DATA_store(sub_table,sub_library,sub_module,sub_level,sub_title,sub_segment)
+
+	IF '$(sub_segment)' = '0' THEN
+		let sub_store_folder = 'lib://$(sub_library)/QVD/DATA/$(sub_module)';
+		let sub_file = 'DATA_$(sub_module)_$(sub_table)';
+	ELSE 
+		let sub_store_folder = 'lib://$(sub_library)/QVD/DATA/$(sub_module)/$(sub_title)';
+		let sub_file = 'DATA_$(sub_module)_$(sub_table)_$(sub_segment)';
+	ENDIF;		
+	
+	CALL store_table ('$(sub_table)','$(sub_store_folder)','$(sub_file)') 
+			
+end sub;
+
+sub detect_layer(S_LAYER)
+
+	let sub_layer = left(documentname(),5);
+	
+	IF '$(sub_layer)' = 'DATA_' THEN
+		SET S_LAYER = 'DATA';
+	ELSEif LEFT('$(sub_layer)',4) = 'STG_' THEN
+		SET S_LAYER = 'STG';
+	ELSE
+		SET S_LAYER = 'APP';
+	ENDIF;
+	
+END SUB;
+
+SUB Enviroment_detect (v_Enviroment,v_QlikViewData,v_QlikSenseData)
+
+	let v_control_qvf = lower(right(DocumentName(),4)); //&chr(10)&' Document title: '&DocumentTitle()&chr(10)&' Document path: '&DocumentPath()
+
+	if '$(v_control_qvf)' = '.qvf' THEN
+		set v_Enviroment 	= 'Desktop';
+		SET v_QlikViewData 	= 'DOCS/Hospital Logistic/QlikViewData';
+		SET v_QlikSenseData = 'DOCS/Hospital Logistic/QlikSenseData';
+		set v_store_folder 	= 'lib://$(v_QlikSenseData)/QVD/KPI/ETL/';
+
+	else 
+		set v_Enviroment 	= 'Enterprise';
+		SET v_QlikViewData 	= 'QlikViewData';
+		SET v_QlikSenseData = 'QlikSenseData';
+		set v_store_folder 	= 'lib://$(v_QlikSenseData)/QVD/KPI/ETL/';
+	end if;
+
+end sub;
+
+sub Schema(s_Schema)
+
+	call Stream_Name(s_stream);
+    
+    LET s_Short_Name = subfield('$(s_stream)','_',1);
+    
+       
+    if '$(s_stream)' = 'Unpublished' or '$(s_Short_Name)' = 'DESA' or '$(s_Short_Name)' = 'DEV' THEN
+    	set s_Schema = 'DESA';
+	elseIF '$(s_Short_Name)' = 'TEST' or '$(s_Short_Name)' = 'QA' THEN
+    	set s_Schema = 'TEST';
+    ELSE
+    	set s_Schema = 'PROD';
+    END IF;
+    
+    trace Schema: $(s_Schema);
+END SUB;
+
+sub Stream_Name(s_stream,sub_app_id)
+
+  if len('$(sub_app_id)') > 10 THEN
+	  TRACE Find app_id $(sub_app_id);
+  ELSE
+  	  LET sub_app_id = documentname();
+      TRACE Find app_id $(sub_app_id);
+  end if;
+
+  LIB CONNECT TO 'monitor_apps_REST_app';
+  
+  RestConnectorMasterTable:
+  SQL SELECT 
+      "id" AS "id_u4",
+      "createdDate" AS "createdDate_u0",
+      "modifiedDate" AS "modifiedDate_u0",
+      "modifiedByUserName" AS "modifiedByUserName_u0",
+      "name" AS "name_u3",
+      "publishTime",
+      "published",
+      "description",
+      "fileSize",
+      "lastReloadTime",
+      "availabilityStatus",
+      "__KEY_root",
+      (SELECT 
+          "userId",
+          "userDirectory",
+          "__FK_owner"
+      FROM "owner" FK "__FK_owner"),
+      (SELECT 
+          "name" AS "name_u2",
+          "__FK_stream"
+      FROM "stream" FK "__FK_stream")
+  FROM JSON (wrap on) "root" PK "__KEY_root";
+  
+  LET NumRows_monitor_apps_REST_app = NoOfRows('RestConnectorMasterTable');
+  
+  map_stream:
+  Mapping LOAD	
+      [__FK_stream] AS [__KEY_root],
+      [name_u2] AS Stream	
+  RESIDENT RestConnectorMasterTable
+  WHERE NOT IsNull([__FK_stream]);
+  
+  App_Stream:
+  LOAD
+      [id_u4] AS ObjectId,
+      ApplyMap('map_stream',__KEY_root,'Unpublished') as App_Stream
+  RESIDENT RestConnectorMasterTable
+  WHERE NOT IsNull([__KEY_root])
+  AND [id_u4] = '$(sub_app_id)';
+  
+  DROP TABLE RestConnectorMasterTable;
+  
+  LET s_stream = peek('App_Stream');
+  trace App $(sub_app_id) located in $(s_stream) stream;
+  
+end sub;

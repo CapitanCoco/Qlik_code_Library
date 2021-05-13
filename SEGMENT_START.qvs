@@ -1,0 +1,8 @@
+set v_Months = 2;
+
+SEGMENT_LIST:
+LOAD DATE(MONTHSTART(ADDMONTHS(TODAY(),1 -1*ROWNO() )),'YYYYMM') AS SEGMENT AUTOGENERATE $(v_Months); 
+
+trace 'Data from last $(v_Months) will be loaded';
+
+	
