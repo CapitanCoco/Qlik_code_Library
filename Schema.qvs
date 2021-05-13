@@ -1,0 +1,17 @@
+sub Schema(s_Schema)
+
+	call Stream_Name(s_stream);
+    
+    LET s_Short_Name = subfield('$(s_stream)','_',1);
+    
+       
+    if '$(s_stream)' = 'Unpublished' or '$(s_Short_Name)' = 'DESA' or '$(s_Short_Name)' = 'DEV' THEN
+    	set s_Schema = 'DESA';
+	elseIF '$(s_Short_Name)' = 'TEST' or '$(s_Short_Name)' = 'QA' THEN
+    	set s_Schema = 'TEST';
+    ELSE
+    	set s_Schema = 'PROD';
+    END IF;
+    
+    trace Schema: $(s_Schema);
+END SUB;
