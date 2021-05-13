@@ -1,0 +1,61 @@
+sub Stream_Name(s_stream,sub_app_id)
+
+  if len('$(sub_app_id)') > 10 THEN
+	  TRACE Find app_id $(sub_app_id);
+  ELSE
+  	  LET sub_app_id = documentname();
+      TRACE Find app_id $(sub_app_id);
+  end if;
+
+  LIB CONNECT TO 'monitor_apps_REST_app';
+  
+  RestConnectorMasterTable:
+  SQL SELECT 
+      "id" AS "id_u4",
+      "createdDate" AS "createdDate_u0",
+      "modifiedDate" AS "modifiedDate_u0",
+      "modifiedByUserName" AS "modifiedByUserName_u0",
+      "name" AS "name_u3",
+      "publishTime",
+      "published",
+      "description",
+      "fileSize",
+      "lastReloadTime",
+      "availabilityStatus",
+      "__KEY_root",
+      (SELECT 
+          "userId",
+          "userDirectory",
+          "__FK_owner"
+      FROM "owner" FK "__FK_owner"),
+      (SELECT 
+          "name" AS "name_u2",
+          "__FK_stream"
+      FROM "stream" FK "__FK_stream")
+  FROM JSON (wrap on) "root" PK "__KEY_root";
+  
+  LET NumRows_monitor_apps_REST_app = NoOfRows('RestConnectorMasterTable');
+  
+  map_stream:
+  Mapping LOAD	
+      [__FK_stream] AS [__KEY_root],
+      [name_u2] AS Stream	
+  RESIDENT RestConnectorMasterTable
+  WHERE NOT IsNull([__FK_stream]);
+  
+  App_Stream:
+  LOAD
+      [id_u4] AS ObjectId,
+      ApplyMap('map_stream',__KEY_root,'Unpublished') as App_Stream
+  RESIDENT RestConnectorMasterTable
+  WHERE NOT IsNull([__KEY_root])
+  AND [id_u4] = '$(sub_app_id)';
+  
+  DROP TABLE RestConnectorMasterTable;
+  
+  LET s_stream = peek('App_Stream');
+  trace App $(sub_app_id) located in $(s_stream) stream;
+  
+end sub;
+
+call Stream_Name(s_stream);
