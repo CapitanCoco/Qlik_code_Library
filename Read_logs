@@ -1,0 +1,52 @@
+Logs: load null() as log_line AutoGenerate 1;
+
+sub read_logs(APP_ID,APP_NAME)
+
+let vStartTime = num(now());
+
+FOR EACH iFOLDER in dirlist('lib://ArchivedLogsFolder/*')
+
+	For each iFILE in filelist('$(iFOLDER)/Script/$(APP_ID).2023*.log')
+	    concatenate (Logs)
+	    LOAD     @1 														as log_line, 
+        	 rowno() 														as line_no,
+        	 '$(iFILE)' 													as Log_name,
+             '$(APP_NAME)' 													as Log_App_Name,
+        	 timestamp(subfield(@1,'.',1)) 									as Log_time,
+             num(timestamp#(subfield(@1,'.',1)))  							as Log_time_num,
+             round(num(timestamp#(subfield(@1,'.',1))) - peek('Log_time_num'),0.0001) 	as Log_duration
+		FROM [$(iFILE)]
+		(txt, utf8, no labels, delimiter is ';', msq);
+
+	next iFILE;
+
+	let vInterval = interval(num(now()) - $(vStartTime));
+    trace Duration $(vInterval) ;
+
+next iFOLDER;
+
+END Sub
+
+CALL read_logs('<Application_id>','ETL 7');
+CALL read_logs('<Application_id>','DAILY');
+
+NoConcatenate
+Logs_Order:
+load *, 
+	if( Log_name = peek('Log_name'),
+		if( Log_duration_flag = 0, interval(peek('Log_duration_flag')),interval(Log_duration_flag)),
+        0) as Log_duration_flag2;
+Load *,
+	 if( substringcount(log_line,'Execution started') >= 1, 0, Log_duration) as Log_duration2,
+     if( Log_duration > 0.0001 and Log_name = peek('Log_name') and substringcount(log_line,'Execution started') = 0, 
+     	Log_duration,0) as Log_duration_flag      
+resident Logs
+order by Log_name,line_no desc;
+
+drop table Logs;
+
+drop field Log_duration_flag;
+rename field Log_duration_flag2 to Log_duration_flag;
+
+drop field Log_duration;
+rename field Log_duration2 to Log_duration
